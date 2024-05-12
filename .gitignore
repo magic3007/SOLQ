@@ -23,4 +23,7 @@ data/*
 paper_abs_exps/*
 paper_main_exps/*
 *.log.txt
+models/ops/build
+models/ops/dist
+models/ops/*.egg-info
 
