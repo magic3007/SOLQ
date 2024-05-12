@@ -135,6 +135,7 @@ def get_args_parser():
     parser.add_argument('--dataset_file', default='coco')
     parser.add_argument('--coco_path', default='./data/coco', type=str)
     parser.add_argument('--coco_panoptic_path', type=str)
+    parser.add_argument('--thyroid_path', default='./data/thyroid', type=str)
     parser.add_argument('--remove_difficult', action='store_true')
 
     parser.add_argument('--alg', default='instformer', type=str)
@@ -150,7 +151,7 @@ def get_args_parser():
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--num_workers', default=2, type=int)
     parser.add_argument('--cache_mode', default=False, action='store_true', help='whether to cache images on memory')
-    
+
     # distributed
     parser.add_argument('--dist-backend', default='nccl', type=str, help='distributed backend')
     parser.add_argument('--dist-url', default=None, type=str, help='url used to set up distributed training')
@@ -324,14 +325,14 @@ def main(gpu, ngpus_per_node, args):
             test_stats, coco_evaluator = evaluate(
                 model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
             )
-    
+
     if args.eval:
         test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
                                               data_loader_val, base_ds, device, args.output_dir)
         if args.output_dir:
             utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
             # here dump results in json format
-            image_set = 'test-dev' if args.test else 'val' 
+            image_set = 'test-dev' if args.test else 'val'
             print('Dump results to {}.'.format(os.path.join(args.output_dir, f'detections_{image_set}2017_{args.alg}_results.json')))
             with open(os.path.join(args.output_dir, f'detections_{image_set}2017_{args.alg}_results.json'), 'w', encoding='utf-8') as f:
                 json.dump(coco_evaluator.eval_results, f, cls=utils.AdaptiveEncoder, indent=4)
@@ -405,5 +406,5 @@ if __name__ == '__main__':
     else:
         args.world_size = 1
         main(0, ngpus_per_node, args)
-        
+
 
