@@ -12,15 +12,31 @@ Transforms and data augmentation for both image + bbox.
 """
 import random
 
+from typing import Dict, List, Optional, Tuple, Union
 import PIL
 import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
-
+from torch import nn, Tensor
 from util.box_ops import box_xyxy_to_cxcywh
 from util.misc import interpolate
 import functools
 print = functools.partial(print, flush=True)
+
+
+class ToDtype(nn.Module):
+    def __init__(self, dtype: torch.dtype, scale: bool = False) -> None:
+        super().__init__()
+        self.dtype = dtype
+        self.scale = scale
+
+    def forward(
+        self, image: Tensor, target: Optional[Dict[str, Tensor]] = None
+    ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
+        if not self.scale:
+            return image.to(dtype=self.dtype), target
+        image = F.convert_image_dtype(image, self.dtype)
+        return image, target
 
 def crop(image, target, region):
     cropped_image = F.crop(image, *region)
@@ -186,15 +202,40 @@ class CenterCrop(object):
         crop_left = int(round((image_width - crop_width) / 2.))
         return crop(img, target, (crop_top, crop_left, crop_height, crop_width))
 
+def _flip_coco_person_keypoints(kps, width):
+    flip_inds = [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
+    flipped_data = kps[:, flip_inds]
+    flipped_data[..., 0] = width - flipped_data[..., 0]
+    # Maintain COCO convention that if visibility == 0, then x, y = 0
+    inds = flipped_data[..., 2] == 0
+    flipped_data[inds] = 0
+    return flipped_data
 
-class RandomHorizontalFlip(object):
-    def __init__(self, p=0.5):
-        self.p = p
+class RandomHorizontalFlip(T.RandomHorizontalFlip):
+    def forward(
+        self, image: Tensor, target: Optional[Dict[str, Tensor]] = None
+    ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
+        if torch.rand(1) < self.p:
+            image = F.hflip(image)
+            if target is not None:
+                _, _, width = F.get_dimensions(image)
+                target["boxes"][:, [0, 2]] = width - target["boxes"][:, [2, 0]]
+                if "masks" in target:
+                    target["masks"] = target["masks"].flip(-1)
+                if "keypoints" in target:
+                    keypoints = target["keypoints"]
+                    keypoints = _flip_coco_person_keypoints(keypoints, width)
+                    target["keypoints"] = keypoints
+        return image, target
 
-    def __call__(self, img, target):
-        if random.random() < self.p:
-            return hflip(img, target)
-        return img, target
+# class RandomHorizontalFlip(object):
+#     def __init__(self, p=0.5):
+#         self.p = p
+
+#     def __call__(self, img, target):
+#         if random.random() < self.p:
+#             return hflip(img, target)
+#         return img, target
 
 
 class RandomResize(object):
